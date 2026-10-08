@@ -1,0 +1,9 @@
+<resources>
+    <color name="ot_bg">#0C0C0D</color>
+    <style name="Theme.OmniTill" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/ot_bg</item>
+        <item name="android:statusBarColor">@color/ot_bg</item>
+        <item name="android:navigationBarColor">@color/ot_bg</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

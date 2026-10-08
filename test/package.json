@@ -1,0 +1,1 @@
+{ "name": "omnitill-tests", "private": true, "description": "Test helpers (local Supabase stand-in)", "dependencies": { "pg": "^8.11.0" } }
