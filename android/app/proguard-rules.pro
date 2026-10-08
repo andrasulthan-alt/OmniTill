@@ -1,0 +1,1 @@
+-keepclassmembers class app.omnitill.MainActivity$Bridge { @android.webkit.JavascriptInterface <methods>; }
