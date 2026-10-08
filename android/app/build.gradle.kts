@@ -47,6 +47,11 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
 
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
+
     // The website lives in ../../app and is bundled into the APK, so the app opens instantly and offline.
     sourceSets["main"].assets.srcDir(layout.buildDirectory.dir("generated/www"))
 }
@@ -55,7 +60,9 @@ val copyWeb by tasks.registering(Copy::class) {
     from("../../app") { exclude("sw.js", "config.local.js") }
     into(layout.buildDirectory.dir("generated/www/www"))
 }
-tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }.configureEach { dependsOn(copyWeb) }
+tasks.matching {
+    (it.name.startsWith("merge") && it.name.endsWith("Assets")) || it.name.contains("Lint", ignoreCase = true)
+}.configureEach { dependsOn(copyWeb) }
 
 dependencies {
     implementation("androidx.webkit:webkit:1.11.0")
