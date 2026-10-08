@@ -5,6 +5,7 @@ It works offline, syncs between devices in real time, and keeps your data in **y
 
 - **Cafe till:** menu, cart, discounts, tax and service charge, cash/QRIS/card/transfer, printable receipts, shifts with cash count.
 - **Hotel:** rooms, reservations, check-in and check-out, room charges from the till, folio billing, housekeeping states. The database makes double-booking impossible.
+- **Photos:** a photo for each menu item and room. Photos are shrunk on the device (640 px WebP, location data dropped) and kept in your Supabase Storage. Only managers can change them.
 - **Stock:** ingredients with recipes. Every sale takes stock out automatically, atomically, with a full movement history. A paid sale is never refused for low stock.
 - **Reports:** revenue, cost of goods, expenses, profit, top items, payment methods, CSV export.
 - **Offline first:** sales are saved on the device and uploaded when the connection returns. Each sale has an ID made on the device, so a retry can never create a duplicate.
@@ -30,7 +31,8 @@ You need a free [Supabase](https://supabase.com) account. Creating the account a
 
 1. **Create a project** at supabase.com. Pick a region close to your business and save the database password somewhere safe.
 2. **Turn off email confirmation** (recommended for a small business): Authentication, Sign In / Providers, Email, switch off *Confirm email*. If you leave it on, new staff must confirm their email before they can sign in.
-3. **Create the tables:** open SQL Editor, New query, paste the whole of [`supabase/schema.sql`](supabase/schema.sql), press Run. It is safe to run again after updates.
+3. **Create the tables:** open SQL Editor, New query, paste the whole of [`supabase/schema.sql`](supabase/schema.sql), press Run. It is safe to run again after updates. It also creates the `images` storage bucket for photos.
+   Already set up from an older version? Run [`supabase/migrations/002_images.sql`](supabase/migrations/002_images.sql) once to add photos.
 4. **Optional sample data:** paste [`supabase/seed.sql`](supabase/seed.sql) and run it to get a sample cafe menu, ingredients, recipes and six hotel rooms. Skip this for a real launch and add your own menu in the app.
 5. **Copy two values:** Project settings, API. Take the **Project URL** and the **anon (public) key**. Never use the `service_role` key anywhere in this app.
 6. **Open the app,** paste the URL and key on the first screen, create your account. You are the admin.
@@ -81,7 +83,8 @@ app/                  the website (static, no build step)
   vendor/             supabase-js and the fonts, copied in so the app works offline
 supabase/schema.sql   tables, Row Level Security, database functions
 supabase/seed.sql     optional sample data
-android/              Android (TWA) wrapper and signing instructions
+supabase/migrations/  one-off upgrades for existing projects
+android/              Android WebView wrapper and signing instructions
 test/                 database and browser tests, plus a local Supabase stand-in
 .github/workflows/    GitHub Pages and Android release workflows
 ```
@@ -95,9 +98,10 @@ A small stand-in server (`test/mock-supabase.js`) plays the part of Supabase sig
 (cd test && npm install) && bash test/restart.sh                                   # fresh database with schema + sample data, and the stand-in server
 psql -h /tmp -p 54329 -U postgres -d ot -f test/db_test.sql   # database rules: roles, double booking, stock, voids
 python3 test/e2e2.py                                    # 19 browser checks on a phone-sized screen
+python3 test/e2e_photos.py                              # 8 checks for menu and room photos
 ```
 
-The stand-in mimics only what the app uses (sign-up, password sign-in, REST). Real Supabase behaves the same for these.
+The stand-in mimics only what the app uses (sign-up, password sign-in, REST, photo storage). Real Supabase behaves the same for these.
 
 ## Credits and licence
 
