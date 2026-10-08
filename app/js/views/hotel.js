@@ -3,6 +3,7 @@ import { icon } from '../icons.js';
 import { S, on, can, isManager } from '../state.js';
 import { rpc, run, reloadBookings, reloadRooms } from '../api.js';
 import { methodLabel } from '../receipt.js';
+import { photo, photoOrBlank, pickImage, shrink, uploadImage, removeImage } from '../images.js';
 
 const HK = { clean: 'Clean', dirty: 'Dirty', maintenance: 'Maintenance' };
 
@@ -29,11 +30,12 @@ export async function render(view, { go }) {
 
   function paint() {
     const rooms = S.rooms.filter((r) => r.active);
+    const anyImg = rooms.some((r) => r.image_url);
     if (!rooms.length) mount(grid, h('div', { class: 'empty', style: null }, h('div', { class: 'dot' }, 'No rooms'), isManager() ? 'Add rooms with the Rooms button.' : 'A manager needs to add rooms.'));
     else mount(grid, rooms.map((r) => {
       const { stay, arriving, next } = stateOf(r);
-      return h('button', { class: 'room ' + (stay ? 'occupied' : '') + (r.housekeeping === 'maintenance' ? ' maintenance' : ''), onclick: () => roomDialog(r), 'aria-label': `Room ${r.number}` },
-        h('div', { class: 'row between' }, h('span', { class: 'no' }, r.number), h('span', { class: 'mono' }, r.type)),
+      return h('button', { class: 'room ' + (stay ? 'occupied' : '') + (r.housekeeping === 'maintenance' ? ' maintenance' : '') + (anyImg ? ' has-img' : ''), onclick: () => roomDialog(r), 'aria-label': `Room ${r.number}` },
+        photoOrBlank(r.image_url, r.type, anyImg), h('div', { class: 'row between' }, h('span', { class: 'no' }, r.number), h('span', { class: 'mono' }, r.type)),
         h('div', { class: 'col', style: null },
           stay ? h('b', null, stay.guest_name) : arriving ? h('b', null, arriving.guest_name) : h('span', { class: 'muted' }, 'Vacant'),
           h('span', { class: 'mono' }, stay ? `Until ${dshort(stay.check_out)}` : arriving ? 'Arriving today' : next ? `Next ${dshort(next.check_in)}` : money(r.rate) + ' / night')),
@@ -56,6 +58,7 @@ export async function render(view, { go }) {
     const hkBtns = ['clean', 'dirty', 'maintenance'].filter((k) => k !== room.housekeeping && (k !== 'maintenance' || isManager())).map((k) =>
       h('button', { class: 'btn sm', onclick: async (e) => busy(e.currentTarget, async () => { try { await rpc('room_set_housekeeping', { p_room: room.id, p_state: k }); await reloadRooms(); m.close(); toast(`Room ${room.number} marked ${HK[k].toLowerCase()}`); } catch (er) { toast(errText(er), 'error'); } }) }, 'Mark ' + HK[k].toLowerCase()));
     const m = openModal(`Room ${room.number}`, h('div', null,
+      photo(room.image_url, `Room ${room.number}`, 'room-photo'),
       h('div', { class: 'row gap wrap' }, h('span', { class: 'tag' }, room.type), h('span', { class: 'tag' }, `Sleeps ${room.capacity}`), h('span', { class: 'tag' }, money(room.rate) + ' / night'), h('span', { class: 'tag ' + (room.housekeeping === 'clean' ? '' : 'red') }, HK[room.housekeeping])),
       h('div', { class: 'sep' }),
       b ? h('div', null, h('h3', { class: 'label' }, stay ? 'Current guest' : 'Arriving today'), h('p', null, h('b', null, b.guest_name), ` · ${dshort(b.check_in)} → ${dshort(b.check_out)}`),
@@ -139,10 +142,24 @@ export async function render(view, { go }) {
     function draw() {
       const num = h('input', { required: true, maxlength: 10, placeholder: 'Number' }), type = h('input', { value: 'Standard', maxlength: 30 });
       const rate = h('input', { type: 'number', min: 0, step: 'any', required: true, placeholder: 'Rate' }), cap = h('input', { type: 'number', min: 1, value: 2 });
-      mount(body, S.rooms.map((r) => h('div', { class: 'list-item' }, h('span', null, h('b', null, r.number), ` · ${r.type} · ${money(r.rate)}`, r.active ? '' : h('span', { class: 'tag', style: null }, ' hidden')),
-        h('button', { class: 'btn sm', onclick: async () => { try { await run(S.sb.from('rooms').update({ active: !r.active }).eq('id', r.id)); await reloadRooms(); draw(); } catch (e) { toast(errText(e), 'error'); } } }, r.active ? 'Hide' : 'Show'))),
+      mount(body, S.rooms.map((r) => h('div', { class: 'list-item' }, h('span', { class: 'row gap' }, photo(r.image_url, '', 'mini'), h('span', null, h('b', null, r.number), ` · ${r.type} · ${money(r.rate)}`, r.active ? '' : h('span', { class: 'tag', style: null }, ' hidden'))),
+        h('span', { class: 'row gap' },
+          h('button', { class: 'btn sm', onclick: (e) => setPhoto(e.currentTarget, r) }, r.image_url ? 'Change photo' : 'Add photo'),
+          r.image_url ? h('button', { class: 'btn sm', onclick: (e) => busy(e.currentTarget, async () => { try { await run(S.sb.from('rooms').update({ image_url: '' }).eq('id', r.id)); removeImage(r.image_url); await reloadRooms(); draw(); } catch (er) { toast(errText(er), 'error'); } }) }, 'Remove photo') : null,
+          h('button', { class: 'btn sm', onclick: async () => { try { await run(S.sb.from('rooms').update({ active: !r.active }).eq('id', r.id)); await reloadRooms(); draw(); } catch (e) { toast(errText(e), 'error'); } } }, r.active ? 'Hide' : 'Show')))),
       h('div', { class: 'sep' }), h('form', { onsubmit: async (e) => { e.preventDefault(); try { await run(S.sb.from('rooms').insert({ number: num.value.trim(), type: type.value.trim() || 'Standard', rate: Number(rate.value), capacity: Number(cap.value) })); await reloadRooms(); draw(); } catch (er) { toast(errText(er), 'error'); } } },
         h('h3', { class: 'label' }, 'Add a room'), h('div', { class: 'grid2' }, field('Number', num), field('Type', type)), h('div', { class: 'grid2' }, field('Rate per night', rate), field('Sleeps', cap)), h('button', { class: 'btn primary' }, 'Add room')));
+    }
+    async function setPhoto(btn, r) {
+      const f = await pickImage(); if (!f) return;
+      await busy(btn, async () => {
+        try {
+          const url = await uploadImage('rooms', r.id, await shrink(f));
+          await run(S.sb.from('rooms').update({ image_url: url }).eq('id', r.id));
+          if (r.image_url) removeImage(r.image_url);
+          await reloadRooms(); draw(); toast('Photo saved', 'ok');
+        } catch (e) { toast(errText(e), 'error'); }
+      });
     }
     openModal('Rooms', body, { wide: true }); draw();
   }

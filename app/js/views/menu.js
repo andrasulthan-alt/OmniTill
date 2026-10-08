@@ -2,6 +2,7 @@ import { h, mount, money, toast, errText, openModal, busy, field, num, debounce 
 import { icon } from '../icons.js';
 import { S } from '../state.js';
 import { run, loadCatalog, loadIngredients } from '../api.js';
+import { photo, photoField } from '../images.js';
 
 export async function render(view) {
   const st = { cat: null };
@@ -19,7 +20,7 @@ export async function render(view) {
       st.cat ? h('p', null, h('button', { class: 'btn sm', onclick: () => editCategory(S.categories.find((c) => c.id === st.cat)) }, 'Edit this category')) : null,
       list.length ? h('div', { class: 'card flush scroll-x' }, h('table', { class: 'table' },
         h('thead', null, h('tr', null, ['Item', 'Category', 'Price', 'Status', ''].map((x, k) => h('th', { class: k === 2 ? 'r' : '' }, x)))),
-        h('tbody', null, list.map((p) => h('tr', null, h('td', null, h('b', null, p.name), p.popular ? h('span', { class: 'red' }, ' •') : null), h('td', { class: 'muted' }, S.categories.find((c) => c.id === p.category_id)?.name || ''),
+        h('tbody', null, list.map((p) => h('tr', null, h('td', null, h('span', { class: 'row gap' }, photo(p.image_url, '', 'mini'), h('b', null, p.name)), p.popular ? h('span', { class: 'red' }, ' •') : null), h('td', { class: 'muted' }, S.categories.find((c) => c.id === p.category_id)?.name || ''),
           h('td', { class: 'r num' }, money(p.price)), h('td', null, h('span', { class: 'tag dot ' + (p.active ? '' : 'red') }, p.active ? 'On menu' : 'Hidden')),
           h('td', { class: 'r' }, h('button', { class: 'btn sm', onclick: () => editProduct(p) }, 'Edit'))))))) :
         h('div', { class: 'empty' }, h('div', { class: 'dot' }, 'Empty'), 'No items here yet.'));
@@ -46,6 +47,7 @@ export async function render(view) {
     const name = h('input', { required: true, maxlength: 80, value: p?.name || '' });
     const cat = h('select', { required: true }, S.categories.map((c) => h('option', { value: c.id, selected: p ? p.category_id === c.id : st.cat === c.id }, `${c.name} (${c.area})`)));
     const price = h('input', { type: 'number', min: 0, step: 'any', inputmode: 'decimal', required: true, value: p?.price ?? '' });
+    const pic = photoField(p?.image_url);
     const popular = h('input', { type: 'checkbox', checked: !!p?.popular }), active = h('input', { type: 'checkbox', checked: p ? p.active : true });
     let recipe = [];
     if (p) { try { recipe = (await run(S.sb.from('recipes').select('ingredient_id, qty').eq('product_id', p.id))).map((r) => ({ id: r.ingredient_id, qty: Number(r.qty) })); } catch { /* ignore */ } }
@@ -65,8 +67,11 @@ export async function render(view) {
       try {
         const row = { name: name.value.trim(), category_id: cat.value, price: Number(price.value), popular: popular.checked, active: active.checked };
         let id = p?.id;
-        if (p) await run(S.sb.from('products').update(row).eq('id', id));
-        else id = (await run(S.sb.from('products').insert(row).select('id').single())).id;
+        if (p) { if (pic.changed()) row.image_url = await pic.save('products', id); await run(S.sb.from('products').update(row).eq('id', id)); }
+        else {
+          id = (await run(S.sb.from('products').insert(row).select('id').single())).id;
+          if (pic.changed()) await run(S.sb.from('products').update({ image_url: await pic.save('products', id) }).eq('id', id));
+        }
         const clean = recipe.filter((r) => r.id && r.qty > 0);
         const merged = new Map(); clean.forEach((r) => merged.set(r.id, (merged.get(r.id) || 0) + r.qty));
         await run(S.sb.from('recipes').delete().eq('product_id', id));
@@ -74,7 +79,7 @@ export async function render(view) {
         await refresh(); m.close(); toast('Saved', 'ok');
       } catch (ex) { err.textContent = errText(ex); }
     }); } },
-    field('Name', name), h('div', { class: 'grid2' }, field('Category', cat), field('Price', price)),
+    field('Name', name), h('div', { class: 'grid2' }, field('Category', cat), field('Price', price)), pic.el,
     h('label', { class: 'row gap', style: null }, popular, h('span', null, 'Popular (shown first)')), h('div', { style: null }, ''), h('label', { class: 'row gap' }, active, h('span', null, 'On the menu')),
     h('div', { class: 'sep' }), rbox, err, h('div', { class: 'row end gap' }, h('button', { type: 'button', class: 'btn', onclick: () => m.close() }, 'Cancel'), btn));
     const m = openModal(p ? 'Edit item' : 'New item', form, { wide: true }); drawRecipe();

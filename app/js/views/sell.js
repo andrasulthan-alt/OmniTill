@@ -5,6 +5,7 @@ import { rpc, loadShift, reloadBookings } from '../api.js';
 import { queueSale, results } from '../sync.js';
 import { totals, quickCash } from '../calc.js';
 import { receiptNode, printReceipt, methodLabel } from '../receipt.js';
+import { photoOrBlank } from '../images.js';
 
 export async function render(view) {
   const st = { area: S.business.hotel_enabled ? null : 'cafe', cat: null, q: '', cart: new Map(), channel: 'dine_in', table: '', booking: null, discount: 0, dtype: 'amount', open: false };
@@ -57,10 +58,11 @@ export async function render(view) {
     if (st.q) list = list.filter((p) => p.name.toLowerCase().includes(st.q));
     list.sort((a, b) => (b.popular - a.popular) || a.sort - b.sort || a.name.localeCompare(b.name));
     if (!list.length) return mount(grid, h('div', { class: 'empty', style: null }, h('div', { class: 'dot' }, 'No items'), S.products.length ? 'Nothing matches.' : 'The menu is empty. A manager can add items under Menu.'));
+    const anyImg = list.some((p) => p.image_url);
     mount(grid, list.map((p) => {
       const q = st.cart.get(p.id)?.qty || 0;
-      return h('button', { class: 'product', onclick: () => add(p), 'aria-label': `Add ${p.name}, ${money(p.price)}` },
-        h('b', null, p.name, p.popular ? h('span', { class: 'red' }, ' •') : null), h('span', { class: 'row between' }, h('span', { class: 'price num' }, money(p.price)), q ? h('span', { class: 'qty num' }, q) : null));
+      return h('button', { class: 'product' + (anyImg ? ' has-img' : ''), onclick: () => add(p), 'aria-label': `Add ${p.name}, ${money(p.price)}` },
+        photoOrBlank(p.image_url, p.name, anyImg), h('b', null, p.name, p.popular ? h('span', { class: 'red' }, ' •') : null), h('span', { class: 'row between' }, h('span', { class: 'price num' }, money(p.price)), q ? h('span', { class: 'qty num' }, q) : null));
     }));
   }
   function add(p) { const l = st.cart.get(p.id); if (l) l.qty = Math.min(999, l.qty + 1); else st.cart.set(p.id, { p, qty: 1 }); paintGrid(); paintCart(); }
