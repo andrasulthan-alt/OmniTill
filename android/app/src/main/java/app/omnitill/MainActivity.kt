@@ -11,6 +11,8 @@ import android.print.PrintAttributes
 import android.print.PrintManager
 import android.provider.MediaStore
 import android.webkit.JavascriptInterface
+import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
@@ -18,6 +20,8 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.webkit.WebViewAssetLoader
 
@@ -27,6 +31,13 @@ import androidx.webkit.WebViewAssetLoader
  */
 class MainActivity : AppCompatActivity() {
     private lateinit var web: WebView
+    private var fileCallback: ValueCallback<Array<Uri>>? = null
+
+    // Android photo picker: the app sees only the one photo the user picks, no storage permission needed.
+    private val pickPhoto = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        fileCallback?.onReceiveValue(if (uri != null) arrayOf(uri) else null)
+        fileCallback = null
+    }
 
     private val loader by lazy {
         WebViewAssetLoader.Builder()
@@ -46,7 +57,7 @@ class MainActivity : AppCompatActivity() {
             javaScriptEnabled = true
             domStorageEnabled = true
             allowFileAccess = false
-            allowContentAccess = false
+            allowContentAccess = true       // needed to read the photo the user picks; the page CSP still blocks content: URLs
             mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             setSupportZoom(false)
             builtInZoomControls = false
@@ -66,6 +77,21 @@ class MainActivity : AppCompatActivity() {
                     try { startActivity(Intent(Intent.ACTION_VIEW, u)) } catch (_: Exception) { /* no app for it */ }
                 }
                 return true     // never navigate away from the till inside the WebView
+            }
+        }
+
+        web.webChromeClient = object : WebChromeClient() {
+            override fun onShowFileChooser(view: WebView, callback: ValueCallback<Array<Uri>>, params: FileChooserParams): Boolean {
+                fileCallback?.onReceiveValue(null)
+                fileCallback = callback
+                return try {
+                    pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    true
+                } catch (e: Exception) {
+                    fileCallback = null
+                    callback.onReceiveValue(null)
+                    false
+                }
             }
         }
 
